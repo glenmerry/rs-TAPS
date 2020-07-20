@@ -3,27 +3,28 @@ use crate::selection_properties::PreferenceLevel;
 
 use enum_map::{enum_map, EnumMap};
 
+#[derive(Debug, Copy, Clone)]
 pub struct TransportProperties {
-    selection_properties: EnumMap<SelectionProperty, PreferenceLevel>,
+    pub selection_properties: EnumMap<SelectionProperty, PreferenceLevel>,
 }
 
 impl Default for TransportProperties {
     fn default() -> TransportProperties {
         TransportProperties {
             selection_properties: enum_map! {
-                SelectionProperty::Reliability              => PreferenceLevel::Ignore,
-                SelectionProperty::PreserveMsgBoundaries    => PreferenceLevel::Ignore,
+                SelectionProperty::Reliability              => PreferenceLevel::Require,
+                SelectionProperty::PreserveMsgBoundaries    => PreferenceLevel::Prefer,
                 SelectionProperty::PerMsgReliability        => PreferenceLevel::Ignore,
-                SelectionProperty::PreserveOrder            => PreferenceLevel::Ignore,
-                SelectionProperty::ZeroRttMsg               => PreferenceLevel::Ignore,
-                SelectionProperty::Multistreaming           => PreferenceLevel::Ignore,
+                SelectionProperty::PreserveOrder            => PreferenceLevel::Require,
+                SelectionProperty::ZeroRttMsg               => PreferenceLevel::Prefer,
+                SelectionProperty::Multistreaming           => PreferenceLevel::Prefer,
                 SelectionProperty::PerMsgChecksumLenSend    => PreferenceLevel::Ignore,
                 SelectionProperty::PerMsgChecksumLenRecv    => PreferenceLevel::Ignore,
-                SelectionProperty::CongestionControl        => PreferenceLevel::Ignore,
-                SelectionProperty::Interface                => PreferenceLevel::Ignore,
-                SelectionProperty::Pvd                      => PreferenceLevel::Ignore,
-                SelectionProperty::UseTemporaryLocalAddress => PreferenceLevel::Ignore,
-                SelectionProperty::Multipath                => PreferenceLevel::Ignore,
+                SelectionProperty::CongestionControl        => PreferenceLevel::Require,
+                // SelectionProperty::Interface                => PreferenceLevel::Ignore,
+                // SelectionProperty::Pvd                      => PreferenceLevel::Ignore,
+                // SelectionProperty::UseTemporaryLocalAddress => PreferenceLevel::Ignore,
+                SelectionProperty::Multipath                => PreferenceLevel::Prefer,
                 SelectionProperty::Direction                => PreferenceLevel::Ignore,
                 SelectionProperty::RetransmitNotify         => PreferenceLevel::Ignore,
                 SelectionProperty::SoftErrorNotify          => PreferenceLevel::Ignore,

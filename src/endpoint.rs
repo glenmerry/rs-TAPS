@@ -1,8 +1,9 @@
 
+#[derive(Debug)]
 pub struct LocalEndpoint<'a> {
-    port: Option<u16>,
-    address: Option<&'a str>,
-    interface: Option<&'a str>,
+    pub port: Option<u16>,
+    pub address: Option<&'a str>,
+    pub interface: Option<&'a str>,
 }
 
 impl<'a> LocalEndpoint<'a> {
@@ -27,11 +28,12 @@ impl<'a> LocalEndpoint<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct RemoteEndpoint<'a> {
-    port: Option<u16>,
-    address: Option<&'a str>,
-    host_name: Option<&'a str>,
-    service: Option<&'a str>, // eg. https
+    pub port: Option<u16>,
+    pub address: Option<&'a str>,
+    pub host_name: Option<&'a str>,
+    pub service: Option<&'a str>, // eg. https
 }
 
 impl<'a> RemoteEndpoint<'a> {
