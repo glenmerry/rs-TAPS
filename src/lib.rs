@@ -7,12 +7,8 @@ mod listener;
 mod framer;
 mod error;
 
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
-
 #[async_std::test]
-async fn test() -> std::io::Result<()>  {
+async fn test() -> Result<(), error::TapsError> {
     let mut ep = endpoint::RemoteEndpoint::new();
     ep.with_host_name("apple.com");
     ep.with_port(5000);
@@ -23,7 +19,12 @@ async fn test() -> std::io::Result<()>  {
 
     let preconnection = preconnection::Preconnection::new(None, Some(ep), Some(tp));
 
-    let connection = preconnection.initiate().await.unwrap();
+    let connection = preconnection.initiate().await;
+
+    let connection = match connection {
+        Ok(c) => c,
+        Err(e) => return Err(e),
+    };
 
     Ok(())
 }

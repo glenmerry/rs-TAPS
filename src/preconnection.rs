@@ -10,11 +10,10 @@ use crate::selection_properties;
 use crate::selection_properties::ServiceLevel;
 use crate::selection_properties::PreferenceLevel;
 
-use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use async_std::task;
+use async_std::net::{SocketAddr, ToSocketAddrs};
 use pnet::datalink;
 
 #[derive(Debug)]
@@ -41,11 +40,13 @@ impl<'a> Preconnection<'a> {
 
         // Ensure sufficient remote endpoint parameters have been supplied for Connection establishment
         if self.remote_endpoint.is_none() {
-            return Err(TapsError::new("No remote endpoint was provided to initiate Connection to"));
-        } else if self.remote_endpoint.as_ref().unwrap().port.is_none() {
-            return Err(TapsError::new("A port must be provided in the remote endpoint in order to initiate a Connection"));
-        } else if self.remote_endpoint.as_ref().unwrap().address.is_none() && self.remote_endpoint.as_ref().unwrap().host_name.is_none() {
-            return Err(TapsError::new("An address or host name must be provided in the remote endpoint in order to initiate a Connection"));
+            return Err(TapsError::RemoteEndpointNotProvided);
+        } 
+        if self.remote_endpoint.as_ref().unwrap().port.is_none() {
+            return Err(TapsError::RemoteEndpointPortNotProvided);
+        } 
+        if self.remote_endpoint.as_ref().unwrap().address.is_none() && self.remote_endpoint.as_ref().unwrap().host_name.is_none() {
+            return Err(TapsError::RemoteEndpointAddressAndHostNameBothNotProvided);
         }
 
         // CANDIDATE GATHERING
@@ -58,7 +59,7 @@ impl<'a> Preconnection<'a> {
         // IP address provided in remote endpoint
         if self.remote_endpoint.as_ref().unwrap().address.is_some() {
             let addr = self.remote_endpoint.as_ref().unwrap().address.as_ref().unwrap();
-            let from_addr = format!("{}:{}", addr, port).to_socket_addrs().unwrap();
+            let from_addr = format!("{}:{}", addr, port).to_socket_addrs().await?;
             for a in from_addr {
                 candidate_remote_addrs.insert(a);
             }
@@ -67,7 +68,7 @@ impl<'a> Preconnection<'a> {
         // Host name provided in remote endpoint
         if self.remote_endpoint.as_ref().unwrap().host_name.is_some() {
             let host_name = self.remote_endpoint.as_ref().unwrap().host_name.as_ref().unwrap();
-            let from_host_name = format!("{}:{}", host_name, port).to_socket_addrs().unwrap();
+            let from_host_name = format!("{}:{}", host_name, port).to_socket_addrs().await?;
             for a in from_host_name {
                 candidate_remote_addrs.insert(a);
             }
@@ -138,7 +139,7 @@ impl<'a> Preconnection<'a> {
         }
 
         if candidate_protocol_ranks.len() == 0 {
-            return Err(TapsError::new("No compatible protocols found with provided Transport Properties - unable to initiate Connection"));
+            return Err(TapsError::NoCompatibleProtocolStacks);
         }
 
         for (protocol, rank) in candidate_protocol_ranks.iter() {
@@ -188,8 +189,10 @@ impl<'a> Preconnection<'a> {
     pub async fn listen(self) -> Result<Listener<'a>, TapsError> {
 
         if self.local_endpoint.is_none() {
-            return Err(TapsError::new("A local endpoint must be supplied to listen for incoming connections"));
+            return Err(TapsError::LocalEndpointNotProvided);
         }
+
+        todo!();
 
         return Ok(Listener::new(self))
     }

@@ -16,16 +16,18 @@ impl<'a> Connection<'a> {
     }
 
     pub async fn send(&self, message_data: &[u8]) -> Result<(),TapsError> {
-        return Result::Ok(());
+        todo!();
     }
 
     pub async fn receive(&self) -> Result<(),TapsError> {
-        return Result::Ok(());
+        todo!();
     }
 
     pub async fn close(&self) -> Result<(),TapsError> {
-        return Result::Ok(());
+        todo!();
     }
 
-    pub fn abort(&self) -> () { }
+    pub fn abort(&self) -> () {
+        todo!();
+    }
 }
