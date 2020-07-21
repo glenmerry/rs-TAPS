@@ -36,7 +36,7 @@ impl<'a> Preconnection<'a> {
         }
     }
 
-    pub async fn initiate(self) -> Result<Connection<'a>, TapsError> {
+    pub async fn initiate(mut self) -> Result<Connection<'a>, TapsError> {
 
         // Ensure sufficient remote endpoint parameters have been supplied for Connection establishment
         if self.remote_endpoint.is_none() {
@@ -47,6 +47,11 @@ impl<'a> Preconnection<'a> {
         } 
         if self.remote_endpoint.as_ref().unwrap().address.is_none() && self.remote_endpoint.as_ref().unwrap().host_name.is_none() {
             return Err(TapsError::RemoteEndpointAddressAndHostNameBothNotProvided);
+        }
+
+        // If no Transport Properties provided, use default Transport Properties
+        if self.transport_properties.is_none() {
+            self.transport_properties = Some(TransportProperties::default());
         }
 
         // CANDIDATE GATHERING
