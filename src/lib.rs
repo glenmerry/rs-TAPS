@@ -10,8 +10,9 @@ mod error;
 #[async_std::test]
 async fn test() -> Result<(), error::TapsError> {
     let mut ep = endpoint::RemoteEndpoint::new();
-    ep.with_host_name("apple.com");
-    ep.with_port(5000);
+    // ep.with_host_name("apple.com");
+    ep.with_address("127.0.0.1");
+    ep.with_port(13370);
 
     let mut tp = transport_properties::TransportProperties::default();
     tp.add(selection_properties::SelectionProperty::Reliability, selection_properties::PreferenceLevel::Require);

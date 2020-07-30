@@ -10,6 +10,7 @@ pub enum TapsError {
     RemoteEndpointPortNotProvided,
     RemoteEndpointAddressAndHostNameBothNotProvided,
     NoCompatibleProtocolStacks,
+    NoCandidateSucceeded,
 }
 
 impl fmt::Display for TapsError {
@@ -30,6 +31,8 @@ impl fmt::Display for TapsError {
             TapsError::NoCompatibleProtocolStacks                      => write!(f, "After performing candidate gathering, no protocol stacks \
                                                                                      were found that satisfy the provided Transport Properties. \
                                                                                      Therefore, Connection initiation cannot take place."),
+            TapsError::NoCandidateSucceeded                            => write!(f, "No candidate connection handshake completed successfully. \
+                                                                                     Therefore, Connection ititiation was unsuccessful"),
         }
     }
 }
