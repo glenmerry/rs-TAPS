@@ -38,12 +38,6 @@ pub enum SelectionProperty {
     SoftErrorNotify,
 }
 
-pub enum SupportedProtocols {
-    TCP,
-    QUIC,
-}
-
-
 pub fn get_supported_protocols() -> HashMap<&'static str, EnumMap<SelectionProperty, ServiceLevel>> {
     let mut supported_protocols = HashMap::new();
 
