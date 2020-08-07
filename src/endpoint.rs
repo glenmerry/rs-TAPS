@@ -1,5 +1,5 @@
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct LocalEndpoint<'a> {
     pub port: Option<u16>,
     pub address: Option<&'a str>,
@@ -28,7 +28,7 @@ impl<'a> LocalEndpoint<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct RemoteEndpoint<'a> {
     pub port: Option<u16>,
     pub address: Option<&'a str>,

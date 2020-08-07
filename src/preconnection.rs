@@ -11,28 +11,35 @@ use crate::selection_properties::PreferenceLevel;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::boxed::Box;
 
 use async_std::{
     prelude::*,
     task,
-    net::{SocketAddr, ToSocketAddrs, TcpStream, UdpSocket},
+    net::{ToSocketAddrs, TcpStream, UdpSocket},
 };
 use futures::stream::FuturesUnordered;
 use itertools::interleave;
+use quiche;
+use ring::rand::*;
 
-#[derive(Debug)]
-struct TransportInstance {
+const QUIC_MAX_DATAGRAM_SIZE: usize = 1350;
+const QUIC_HTTP_REQ_STREAM_ID: u64 = 4;
+
+// #[derive(Debug)]
+pub struct TransportInstance {
     tcp_stream_instance: Option<TcpStream>,
     udp_socket_instance: Option<UdpSocket>,
-    quic_stream_instance: Option<()>,
+    quic_stream_instance: Option<(Pin<Box<quiche::Connection>>, mio::net::UdpSocket)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Preconnection<'a> {
-    local_endpoint: Option<LocalEndpoint<'a>>,
-    remote_endpoint: Option<RemoteEndpoint<'a>>,
+    pub local_endpoint: Option<LocalEndpoint<'a>>,
+    pub remote_endpoint: Option<RemoteEndpoint<'a>>,
     transport_properties: Option<TransportProperties>,
-    transport_instance: Option<TransportInstance>,
 }
 
 impl<'a> Preconnection<'a> {
@@ -45,7 +52,6 @@ impl<'a> Preconnection<'a> {
             local_endpoint: local_endpoint,
             remote_endpoint: remote_endpoint,
             transport_properties: transport_properties,
-            transport_instance: None,
         }
     }
 
@@ -70,18 +76,14 @@ impl<'a> Preconnection<'a> {
         {
             // Gather candidate connections
             let candidates = self.gather_candidates().await;
-
             let candidates = match candidates {
                 Ok(c) => c,
                 Err(e) => return Err(e),
             };
 
             // Race gatherered candidates
-
             // Use delayed racing with connection attempts launched in parallel with a delay between each.
-
             let mut futures = FuturesUnordered::new();
-
             let mut delay = Duration::from_millis(0);
 
             for candidate in candidates {
@@ -91,16 +93,16 @@ impl<'a> Preconnection<'a> {
 
             task::block_on(async {
                 while let Some(transport_instance) = futures.next().await {
-                    let transport_instance = match transport_instance {
+                    match transport_instance {
                         Ok(transport_instance) => {
-                            self.transport_instance = Some(transport_instance);
-                            if self.transport_instance.as_ref().unwrap().tcp_stream_instance.is_some() {
+                            if transport_instance.tcp_stream_instance.is_some() {
                                 println!("Connected using TCP");
-                            } else if self.transport_instance.as_ref().unwrap().udp_socket_instance.is_some() {
+                            } else if transport_instance.udp_socket_instance.is_some() {
                                 println!("Connected using UDP");
+                            } else if transport_instance.quic_stream_instance.is_some() {
+                                println!("Connected using QUIC");
                             }
-                            
-                            return Ok(Connection::new(self));
+                            return Ok(Connection::new(self, transport_instance));
                         },
                         Err(_) => println!("Connection attempt failed"),
                     };
@@ -111,6 +113,15 @@ impl<'a> Preconnection<'a> {
         }
     }
 
+    pub async fn listen(self) -> Result<Listener<'a>, TapsError> {
+
+        if self.local_endpoint.is_none() {
+            return Err(TapsError::LocalEndpointNotProvided);
+        }
+
+        return Ok(Listener::new(self))
+    }
+    
     // Perform candidate gathering for Connection initiation
     async fn gather_candidates(&self) -> Result<std::vec::Vec<(SocketAddr, Option<SocketAddr>, &'static str)>, TapsError> {
 
@@ -203,7 +214,7 @@ impl<'a> Preconnection<'a> {
         return Ok(candidates);
     }
 
-    fn calculate_candidate_protocol_ranks(&self) -> Result<HashMap<&'static str, u8>, TapsError> {
+    pub fn calculate_candidate_protocol_ranks(&self) -> Result<HashMap<&'static str, u8>, TapsError> {
 
         // Get available protocol stacks on system 
         let candidate_protocols = selection_properties::get_supported_protocols();
@@ -263,17 +274,6 @@ impl<'a> Preconnection<'a> {
         }
         return Ok(candidate_protocol_ranks);
     }
-
-    pub async fn listen(self) -> Result<Listener<'a>, TapsError> {
-
-        if self.local_endpoint.is_none() {
-            return Err(TapsError::LocalEndpointNotProvided);
-        }
-
-        todo!();
-
-        return Ok(Listener::new(self))
-    }
 }
 
 async fn attempt_connection(candidate: (SocketAddr, Option<SocketAddr>, &'static str), delay: Duration) -> Result<TransportInstance, TapsError> {
@@ -283,7 +283,7 @@ async fn attempt_connection(candidate: (SocketAddr, Option<SocketAddr>, &'static
 
     match protocol {
         "tcp" => return connect_tcp(remote_addr, local_addr).await,
-        // "quic" => return connect_quic(addr).await,
+        "quic" => return connect_quic(remote_addr, local_addr).await,
         "udp" => return connect_udp(remote_addr, local_addr).await,
         _ => return Err(TapsError::ProtocolNotSupported),
     }
@@ -329,4 +329,140 @@ async fn connect_udp(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) ->
         udp_socket_instance: Some(socket),
         quic_stream_instance: None,
     });
+}
+
+async fn connect_quic(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) -> Result<TransportInstance, TapsError> {
+
+    return task::spawn_blocking(move || -> Result<TransportInstance, TapsError> {
+
+        let mut buf = [0; 65535];
+        let mut out = [0; QUIC_MAX_DATAGRAM_SIZE];
+
+        // Setup the event loop.
+        let poll = mio::Poll::new().unwrap();
+        let mut events = mio::Events::with_capacity(1024);
+
+        let bind_addr: SocketAddr;
+        if local_addr.is_none() {
+            // Bind to INADDR_ANY or IN6ADDR_ANY depending on the IP family of the
+            // server address. This is needed on macOS and BSD variants that don't
+            // support binding to IN6ADDR_ANY for both v4 and v6.
+            bind_addr = match remote_addr {
+                std::net::SocketAddr::V4(_) => "0.0.0.0:0".parse().unwrap(),
+                std::net::SocketAddr::V6(_) => "[::]:0".parse().unwrap(),
+            };  
+        } else {
+            bind_addr = local_addr.unwrap();
+        }
+
+        // Create the UDP socket backing the QUIC connection, and register it with
+        // the event loop.
+        let socket = std::net::UdpSocket::bind(bind_addr).unwrap();
+        socket.connect(remote_addr).unwrap();
+
+        let socket = mio::net::UdpSocket::from_socket(socket).unwrap();
+        poll.register(
+            &socket,
+            mio::Token(0),
+            mio::Ready::readable(),
+            mio::PollOpt::edge(),
+        )
+        .unwrap();
+
+        // Create the configuration for the QUIC connection.
+        let mut config = quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
+
+        // Generate a random source connection ID for the connection.
+        let mut scid = [0; quiche::MAX_CONN_ID_LEN];
+        SystemRandom::new().fill(&mut scid[..]).unwrap();
+
+        let mut conn = quiche::connect(None, &scid, &mut config).unwrap();
+        
+        println!(
+            "QUIC connection attempt: connecting from {:} to {:} ",
+            socket.local_addr().unwrap(),
+            remote_addr,
+        );
+
+        // initial send
+        let write = conn.send(&mut out).unwrap();
+        while let Err(e) = socket.send(&out[..write]) {
+            if e.kind() == std::io::ErrorKind::WouldBlock {
+                // send() would block
+                continue;
+            }
+            // TODO: this error return should include "e"
+            return Err(TapsError::ConnectionAttemptFailed);
+        }
+
+        loop {
+            poll.poll(&mut events, conn.timeout()).unwrap();
+    
+            // Read incoming UDP packets from the socket and feed them to quiche,
+            // until there are no more packets to read.
+            'read: loop {
+                // If the event loop reported no events, it means that the timeout
+                // has expired, so handle it without attempting to read packets. We
+                // will then proceed with the send loop.
+                if events.is_empty() {    
+                    conn.on_timeout();
+                    break 'read;
+                }
+    
+                let len = match socket.recv(&mut buf) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        // There are no more UDP packets to read, so end the read
+                        // loop.
+                        if e.kind() == std::io::ErrorKind::WouldBlock {
+                            break 'read;
+                        }
+    
+                        return Err(TapsError::ConnectionAttemptFailed);
+                    },
+                };
+    
+                // Process potentially coalesced packets.
+                match conn.recv(&mut buf[..len]) {
+                    Ok(v) => v,
+    
+                    Err(_) => {
+                        continue 'read;
+                    },
+                };    
+            }
+    
+            if conn.is_established() {
+                return Ok(TransportInstance {
+                    tcp_stream_instance: None,
+                    udp_socket_instance: None,
+                    quic_stream_instance: Some((conn, socket)),
+                });
+            }
+
+            // Generate outgoing QUIC packets and send them on the UDP socket, until
+            // quiche reports that there are no more packets to be sent.
+            loop {
+                let write = match conn.send(&mut out) {
+                    Ok(v) => v,
+
+                    Err(quiche::Error::Done) => {
+                        break;
+                    },
+
+                    Err(_) => {
+                        // TODO: handle error
+                        conn.close(false, 0x1, b"fail").ok();
+                        break;
+                    },
+                };
+
+                if let Err(e) = socket.send(&out[..write]) {
+                    if e.kind() == std::io::ErrorKind::WouldBlock {
+                        break;
+                    }
+                }
+            }
+        }
+    }).await;
 }
