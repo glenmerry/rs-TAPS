@@ -30,9 +30,9 @@ const QUIC_HTTP_REQ_STREAM_ID: u64 = 4;
 
 // #[derive(Debug)]
 pub struct TransportInstance {
-    tcp_stream_instance: Option<TcpStream>,
-    udp_socket_instance: Option<UdpSocket>,
-    quic_stream_instance: Option<(Pin<Box<quiche::Connection>>, mio::net::UdpSocket)>,
+    pub tcp_stream_instance: Option<TcpStream>,
+    pub udp_socket_instance: Option<UdpSocket>,
+    pub quic_stream_instance: Option<(Pin<Box<quiche::Connection>>, mio::net::UdpSocket)>,
 }
 
 #[derive(Debug, Clone, Copy)]
