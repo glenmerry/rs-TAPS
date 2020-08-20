@@ -7,6 +7,7 @@ use crate::listener::Listener;
 use crate::selection_properties;
 use crate::selection_properties::ServiceLevel;
 use crate::selection_properties::PreferenceLevel;
+use crate::framer::Framer;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -26,20 +27,20 @@ use quiche;
 use ring::rand::*;
 
 const QUIC_MAX_DATAGRAM_SIZE: usize = 1350;
-const QUIC_HTTP_REQ_STREAM_ID: u64 = 4;
 
 // #[derive(Debug)]
 pub struct TransportInstance {
     pub tcp_stream_instance: Option<TcpStream>,
     pub udp_socket_instance: Option<UdpSocket>,
-    pub quic_stream_instance: Option<(Pin<Box<quiche::Connection>>, mio::net::UdpSocket)>,
+    pub quic_stream_instance: Option<Pin<Box<quiche::Connection>>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Preconnection<'a> {
     pub local_endpoint: Option<LocalEndpoint<'a>>,
     pub remote_endpoint: Option<RemoteEndpoint<'a>>,
     transport_properties: Option<TransportProperties>,
+    pub framer: Option<&'a dyn Framer>,
 }
 
 impl<'a> Preconnection<'a> {
@@ -52,11 +53,11 @@ impl<'a> Preconnection<'a> {
             local_endpoint: local_endpoint,
             remote_endpoint: remote_endpoint,
             transport_properties: transport_properties,
+            framer: None,
         }
     }
 
     pub async fn initiate(mut self) -> Result<Connection<'a>, TapsError> {
-
         // Ensure sufficient remote endpoint parameters have been supplied for Connection establishment
         if self.remote_endpoint.is_none() {
             return Err(TapsError::RemoteEndpointNotProvided);
@@ -120,6 +121,10 @@ impl<'a> Preconnection<'a> {
         }
 
         return Ok(Listener::new(self))
+    }
+
+    pub fn add_framer(mut self, framer: &'a dyn Framer) -> () {
+        self.framer = Some(framer);
     }
     
     // Perform candidate gathering for Connection initiation
@@ -289,7 +294,7 @@ async fn attempt_connection(candidate: (SocketAddr, Option<SocketAddr>, &'static
     }
 }
 
-async fn connect_tcp(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) -> Result<TransportInstance, TapsError> {
+async fn connect_tcp(remote_addr: SocketAddr, _local_addr: Option<SocketAddr>) -> Result<TransportInstance, TapsError> {
     println!("Attempting TCP connection to: {:?}", remote_addr);
 
     let stream = TcpStream::connect(remote_addr).await;
@@ -334,7 +339,6 @@ async fn connect_udp(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) ->
 async fn connect_quic(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) -> Result<TransportInstance, TapsError> {
 
     return task::spawn_blocking(move || -> Result<TransportInstance, TapsError> {
-
         let mut buf = [0; 65535];
         let mut out = [0; QUIC_MAX_DATAGRAM_SIZE];
 
@@ -436,7 +440,7 @@ async fn connect_quic(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) -
                 return Ok(TransportInstance {
                     tcp_stream_instance: None,
                     udp_socket_instance: None,
-                    quic_stream_instance: Some((conn, socket)),
+                    quic_stream_instance: Some(conn),
                 });
             }
 

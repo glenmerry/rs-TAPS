@@ -13,6 +13,8 @@ pub enum TapsError {
     ProtocolNotSupported,
     ConnectionAttemptFailed, // TODO: allowing embedding specific details of connection attempt failure 
     NoCandidateSucceeded,
+    MessageSendFailed,
+    MessageReceiveFailed,
 }
 
 impl fmt::Display for TapsError {
@@ -33,11 +35,13 @@ impl fmt::Display for TapsError {
             TapsError::NoCompatibleProtocolStacks                      => write!(f, "After performing candidate gathering, no protocol stacks \
                                                                                      were found that satisfy the provided Transport Properties. \
                                                                                      Therefore, Connection initiation cannot take place."),
-            TapsError::ProtocolNotSupported                            => write!(f, "Attempt was made to connect using a protocol stack which is not supported by rs-TAPS."),
+            TapsError::ProtocolNotSupported                            => write!(f, "Attempt was made to connect using a protocol stack which is not supported by rs_taps."),
             TapsError::ConnectionAttemptFailed                         => write!(f, "Establishing a particular candidate connection during connection racing failed. \
                                                                                      Other candidate connections will be attempted if available."),
             TapsError::NoCandidateSucceeded                            => write!(f, "No candidate connection handshake completed successfully. \
                                                                                      Therefore, Connection ititiation was unsuccessful"),
+            TapsError::MessageSendFailed                               => write!(f, "Error sending message"),
+            TapsError::MessageReceiveFailed                            => write!(f, "Error receiving message"),
         }
     }
 }

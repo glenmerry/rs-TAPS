@@ -6,7 +6,6 @@ use crate::preconnection::TransportInstance;
 use std::pin::Pin;
 
 use async_std::{
-    prelude::*,
     stream::Stream,
     task,
     task::{Context, Poll},
@@ -14,7 +13,7 @@ use async_std::{
 };
 use futures::stream::{FuturesUnordered, StreamExt};
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct Listener<'a> {
     preconnection: Preconnection<'a>,
     allowed_remote_addrs: Vec<SocketAddr>,
@@ -93,7 +92,7 @@ impl<'a> Listener<'a> {
 impl<'a> Stream for Listener<'a> {
     type Item = Connection<'a>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Return any new transport instances as Connection objects
 
         let mut futures = FuturesUnordered::new();
