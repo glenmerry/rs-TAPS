@@ -20,5 +20,5 @@ For an example of using the API, see the test definitions in tests/tests.rs.
 To run the tests, use the command:
 
 ```
-cargo run
+cargo test
 ```
