@@ -13,7 +13,7 @@ To use the rs-TAPS library in your project, add the following dependency to the 
 rs_taps = { git = "https://github.com/glenmerry/rs-TAPS.git" }
 ```
 
-For an example of using the API, see the test definitions in tests/test.rs.
+For an example of using the API, see the test definitions in tests/tests.rs.
 
 ## Testing
 
