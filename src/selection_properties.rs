@@ -1,6 +1,6 @@
-use enum_map::{Enum, enum_map, EnumMap};
-
 use std::collections::HashMap;
+
+use enum_map::{Enum, enum_map, EnumMap};
 
 #[derive(Debug, Enum, PartialEq, Copy, Clone)]
 pub enum PreferenceLevel {
@@ -29,9 +29,6 @@ pub enum SelectionProperty {
     PerMsgChecksumLenSend,
     PerMsgChecksumLenRecv,
     CongestionControl,
-    // Interface,
-    // Pvd,
-    // UseTemporaryLocalAddress,
     Multipath,
     Direction,
     RetransmitNotify,
@@ -71,7 +68,7 @@ pub fn get_supported_protocols() -> HashMap<&'static str, EnumMap<SelectionPrope
         SelectionProperty::Direction                => ServiceLevel::Provided,
         SelectionProperty::RetransmitNotify         => ServiceLevel::NotProvided,
         SelectionProperty::SoftErrorNotify          => ServiceLevel::Provided,
-});
+    });
 
     supported_protocols.insert("quic", enum_map! {
         SelectionProperty::Reliability              => ServiceLevel::Provided,
@@ -90,5 +87,4 @@ pub fn get_supported_protocols() -> HashMap<&'static str, EnumMap<SelectionPrope
     });
 
     return supported_protocols
-
 }

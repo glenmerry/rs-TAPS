@@ -21,32 +21,11 @@ impl Default for TransportProperties {
                 SelectionProperty::PerMsgChecksumLenSend    => PreferenceLevel::Ignore,
                 SelectionProperty::PerMsgChecksumLenRecv    => PreferenceLevel::Ignore,
                 SelectionProperty::CongestionControl        => PreferenceLevel::Require,
-                // SelectionProperty::Interface                => PreferenceLevel::Ignore,
-                // SelectionProperty::Pvd                      => PreferenceLevel::Ignore,
-                // SelectionProperty::UseTemporaryLocalAddress => PreferenceLevel::Ignore,
                 SelectionProperty::Multipath                => PreferenceLevel::Prefer,
                 SelectionProperty::Direction                => PreferenceLevel::Ignore,
                 SelectionProperty::RetransmitNotify         => PreferenceLevel::Ignore,
                 SelectionProperty::SoftErrorNotify          => PreferenceLevel::Ignore,
             }
-            // selection_properties: enum_map! {
-            //     SelectionProperty::Reliability              => PreferenceLevel::Prefer,
-            //     SelectionProperty::PreserveMsgBoundaries    => PreferenceLevel::Prefer,
-            //     SelectionProperty::PerMsgReliability        => PreferenceLevel::Prefer,
-            //     SelectionProperty::PreserveOrder            => PreferenceLevel::Prefer,
-            //     SelectionProperty::ZeroRttMsg               => PreferenceLevel::Prefer,
-            //     SelectionProperty::Multistreaming           => PreferenceLevel::Prefer,
-            //     SelectionProperty::PerMsgChecksumLenSend    => PreferenceLevel::Prefer,
-            //     SelectionProperty::PerMsgChecksumLenRecv    => PreferenceLevel::Prefer,
-            //     SelectionProperty::CongestionControl        => PreferenceLevel::Prefer,
-            //     // SelectionProperty::Interface                => PreferenceLevel::Prefer,
-            //     // SelectionProperty::Pvd                      => PreferenceLevel::Prefer,
-            //     // SelectionProperty::UseTemporaryLocalAddress => PreferenceLevel::Prefer,
-            //     SelectionProperty::Multipath                => PreferenceLevel::Prefer,
-            //     SelectionProperty::Direction                => PreferenceLevel::Prefer,
-            //     SelectionProperty::RetransmitNotify         => PreferenceLevel::Prefer,
-            //     SelectionProperty::SoftErrorNotify          => PreferenceLevel::Prefer,
-            // }
         }
     }
 }

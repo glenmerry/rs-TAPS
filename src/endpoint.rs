@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, Copy)]
 pub struct LocalEndpoint<'a> {
     pub port: Option<u16>,
@@ -33,7 +32,6 @@ pub struct RemoteEndpoint<'a> {
     pub port: Option<u16>,
     pub address: Option<&'a str>,
     pub host_name: Option<&'a str>,
-    pub service: Option<&'a str>, // eg. https
 }
 
 impl<'a> RemoteEndpoint<'a> {
@@ -42,7 +40,6 @@ impl<'a> RemoteEndpoint<'a> {
             port: None,
             address: None,
             host_name: None,
-            service: None,
         }
     }
 
@@ -56,9 +53,5 @@ impl<'a> RemoteEndpoint<'a> {
 
     pub fn with_host_name(&mut self, host_name: &'a str) -> () {
         self.host_name = Some(host_name);
-    }
-
-    pub fn with_service(&mut self, service: &'a str) -> () {
-        self.service = Some(service);
     }
 }

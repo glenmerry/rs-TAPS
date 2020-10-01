@@ -5,11 +5,12 @@ use rs_taps::{
     selection_properties::{SelectionProperty, PreferenceLevel},
     preconnection::Preconnection,
     message::Message,
+    framer::HttpClientFramer,
 };
 
-use std::str;
-
 use async_std::stream::StreamExt;
+
+use http::{Request, Response};
 
 #[async_std::test]
 async fn initiate_test() -> Result<(), TapsError> {
@@ -21,7 +22,11 @@ async fn initiate_test() -> Result<(), TapsError> {
     tp.add(SelectionProperty::Reliability, PreferenceLevel::Require);
     tp.prefer(SelectionProperty::PreserveMsgBoundaries);
 
-    let preconnection = Preconnection::new(None, Some(remote), Some(tp));
+    let preconnection = Preconnection::<Request<()>, Response<()>>::new(
+        None, 
+        Some(remote), 
+        Some(tp),
+        &HttpClientFramer{});
 
     let connection = preconnection.initiate().await;
 
@@ -39,7 +44,11 @@ async fn listen_test() -> Result<(), TapsError> {
 
     let tp = TransportProperties::default();
     
-    let preconnection = Preconnection::new(Some(local), None, Some(tp));
+    let preconnection = Preconnection::<Request<()>, Response<()>>::new(
+        Some(local),
+        None, 
+        Some(tp),
+        &HttpClientFramer{});
 
     let mut listener = preconnection.listen().await?;
     listener.start().await?;
@@ -53,25 +62,32 @@ async fn listen_test() -> Result<(), TapsError> {
 }
 
 #[async_std::test]
-async fn send_test() -> Result<(), TapsError> {
+async fn send_receive_test() -> Result<(), TapsError> {
     let mut remote = RemoteEndpoint::new();
-    remote.with_host_name("example.com");
+    remote.with_host_name("gla.ac.uk");
     remote.with_port(80);
+    let tp = TransportProperties::default();
 
-    let mut tp = TransportProperties::default();
-    tp.add(SelectionProperty::Reliability, PreferenceLevel::Require);
-    tp.prefer(SelectionProperty::PreserveMsgBoundaries);
+    let preconnection = Preconnection::<Request<()>, Response<()>>::new(
+        None, 
+        Some(remote), 
+        Some(tp), 
+        &HttpClientFramer{});
 
-    let preconnection = Preconnection::new(None, Some(remote), Some(tp));
+    let mut connection = preconnection.initiate().await?;
 
-    let connection = preconnection.initiate().await?;
+    let request = Request::builder()
+        .method("GET")
+        .uri("www.gla.ac.uk")
+        .body(())
+        .unwrap();
 
-    let message = Message::new("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n".as_bytes().to_vec(), None);
+    let message = Message::<Request<()>>::new(request, None);
 
     connection.send(message).await?;
 
-    let received = connection.receive().await?;
-    println!("{:?}", str::from_utf8(&received.data));
+    let received_message = connection.receive().await?;
+    println!("Received Message: {:?}", &received_message);
 
     Ok(())
 }

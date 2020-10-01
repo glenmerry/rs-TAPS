@@ -18,9 +18,11 @@ use std::boxed::Box;
 
 use async_std::{
     prelude::*,
+    println,
     task,
     net::{ToSocketAddrs, TcpStream, UdpSocket},
 };
+
 use futures::stream::FuturesUnordered;
 use itertools::interleave;
 use quiche;
@@ -28,7 +30,6 @@ use ring::rand::*;
 
 const QUIC_MAX_DATAGRAM_SIZE: usize = 1350;
 
-// #[derive(Debug)]
 pub struct TransportInstance {
     pub tcp_stream_instance: Option<TcpStream>,
     pub udp_socket_instance: Option<UdpSocket>,
@@ -36,28 +37,29 @@ pub struct TransportInstance {
 }
 
 #[derive(Clone, Copy)]
-pub struct Preconnection<'a> {
+pub struct Preconnection<'a, T, U> {
     pub local_endpoint: Option<LocalEndpoint<'a>>,
     pub remote_endpoint: Option<RemoteEndpoint<'a>>,
-    transport_properties: Option<TransportProperties>,
-    pub framer: Option<&'a dyn Framer>,
+    pub transport_properties: Option<TransportProperties>,
+    pub framer: &'a dyn Framer<T, U>,
 }
 
-impl<'a> Preconnection<'a> {
+impl<'a, T, U> Preconnection<'a, T, U> {
     pub fn new(
         local_endpoint: Option<LocalEndpoint<'a>>, 
         remote_endpoint: Option<RemoteEndpoint<'a>>, 
         transport_properties: Option<TransportProperties>,
-    ) -> Preconnection<'a> {
+        framer: &'a dyn Framer<T, U>,
+    ) -> Preconnection<'a, T, U> {
         Preconnection {
             local_endpoint: local_endpoint,
             remote_endpoint: remote_endpoint,
             transport_properties: transport_properties,
-            framer: None,
+            framer: framer,
         }
     }
 
-    pub async fn initiate(mut self) -> Result<Connection<'a>, TapsError> {
+    pub async fn initiate(mut self) -> Result<Connection<'a, T, U>, TapsError> {
         // Ensure sufficient remote endpoint parameters have been supplied for Connection establishment
         if self.remote_endpoint.is_none() {
             return Err(TapsError::RemoteEndpointNotProvided);
@@ -97,24 +99,24 @@ impl<'a> Preconnection<'a> {
                     match transport_instance {
                         Ok(transport_instance) => {
                             if transport_instance.tcp_stream_instance.is_some() {
-                                println!("Connected using TCP");
+                                println!("Connected using TCP").await;
                             } else if transport_instance.udp_socket_instance.is_some() {
-                                println!("Connected using UDP");
+                                println!("Connected using UDP").await;
                             } else if transport_instance.quic_stream_instance.is_some() {
-                                println!("Connected using QUIC");
+                                println!("Connected using QUIC").await;
                             }
                             return Ok(Connection::new(self, transport_instance));
                         },
-                        Err(_) => println!("Connection attempt failed"),
+                        Err(_) => println!("Connection attempt failed").await,
                     };
                 }
 
-                return Err::<Connection<'a>, TapsError>(TapsError::NoCandidateSucceeded);
+                return Err::<Connection<'a, T, U>, TapsError>(TapsError::NoCandidateSucceeded);
             })
         }
     }
 
-    pub async fn listen(self) -> Result<Listener<'a>, TapsError> {
+    pub async fn listen(self) -> Result<Listener<'a, T, U>, TapsError> {
 
         if self.local_endpoint.is_none() {
             return Err(TapsError::LocalEndpointNotProvided);
@@ -123,10 +125,6 @@ impl<'a> Preconnection<'a> {
         return Ok(Listener::new(self))
     }
 
-    pub fn add_framer(mut self, framer: &'a dyn Framer) -> () {
-        self.framer = Some(framer);
-    }
-    
     // Perform candidate gathering for Connection initiation
     async fn gather_candidates(&self) -> Result<std::vec::Vec<(SocketAddr, Option<SocketAddr>, &'static str)>, TapsError> {
 
@@ -152,7 +150,7 @@ impl<'a> Preconnection<'a> {
             }
         }
 
-        println!("Candidate Remote Endpoint Addresses: {:?}", candidate_remote_addrs);
+        println!("Candidate Remote Endpoint Addresses: {:?}", candidate_remote_addrs).await;
 
         // Gather local endpoint candidates - local endpoint is optional for initiating Connection
         let mut candidate_local_addrs = HashSet::new();
@@ -175,7 +173,7 @@ impl<'a> Preconnection<'a> {
         };
 
         for (protocol, rank) in candidate_protocol_ranks.iter() {
-            println!("Candidate protocol stack: {} has rank {}", protocol, rank); 
+            println!("Candidate protocol stack: {} has rank {}", protocol, rank).await; 
         }
 
         let mut candidate_protocol_ranks_sorted: Vec<_> = candidate_protocol_ranks.iter().collect();
@@ -214,7 +212,7 @@ impl<'a> Preconnection<'a> {
             candidates.extend(interleave(ipv6_candidates, ipv4_candidates));
         }
 
-        println!("\nFinal candidates: {:?}", candidates);
+        println!("\nFinal candidates: {:?}", candidates).await;
 
         return Ok(candidates);
     }
@@ -295,12 +293,12 @@ async fn attempt_connection(candidate: (SocketAddr, Option<SocketAddr>, &'static
 }
 
 async fn connect_tcp(remote_addr: SocketAddr, _local_addr: Option<SocketAddr>) -> Result<TransportInstance, TapsError> {
-    println!("Attempting TCP connection to: {:?}", remote_addr);
+    println!("Attempting TCP connection to: {:?}", remote_addr).await;
 
     let stream = TcpStream::connect(remote_addr).await;
     let stream = match stream {
         Ok(stream) => stream,
-        Err(_) => {println!("TCP connection attempt failed"); return Err(TapsError::ConnectionAttemptFailed)},
+        Err(_) => {println!("TCP connection attempt failed").await; return Err(TapsError::ConnectionAttemptFailed)},
     };
 
     return Ok(TransportInstance {
@@ -315,18 +313,18 @@ async fn connect_udp(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) ->
         return Err(TapsError::ConnectionAttemptFailed);
     }
 
-    println!("Attempting to create UDP socket bound to local address: {:?}, connected to remote address: {:?}", local_addr, remote_addr);
+    println!("Attempting to create UDP socket bound to local address: {:?}, connected to remote address: {:?}", local_addr, remote_addr).await;
 
     let socket = UdpSocket::bind(local_addr.unwrap()).await;
     let socket = match socket {
         Ok(socket) => socket,
-        Err(_) => {println!("UDP connection attempt failed"); return Err(TapsError::ConnectionAttemptFailed)},
+        Err(_) => {println!("UDP connection attempt failed").await; return Err(TapsError::ConnectionAttemptFailed)},
     };
     
     let connect_result = socket.connect(remote_addr).await;
     match connect_result {
         Ok(_) => (),
-        Err(_) => {println!("UDP connection attempt failed"); return Err(TapsError::ConnectionAttemptFailed)},
+        Err(_) => {println!("UDP connection attempt failed").await; return Err(TapsError::ConnectionAttemptFailed)},
     };
 
     return Ok(TransportInstance {
@@ -382,7 +380,7 @@ async fn connect_quic(remote_addr: SocketAddr, local_addr: Option<SocketAddr>) -
 
         let mut conn = quiche::connect(None, &scid, &mut config).unwrap();
         
-        println!(
+        std::println!(
             "QUIC connection attempt: connecting from {:} to {:} ",
             socket.local_addr().unwrap(),
             remote_addr,

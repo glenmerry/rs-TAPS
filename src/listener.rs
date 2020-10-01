@@ -11,20 +11,20 @@ use async_std::{
     task::{Context, Poll},
     net::{SocketAddr, ToSocketAddrs, TcpListener}
 };
+
 use futures::stream::{FuturesUnordered, StreamExt};
 
-// #[derive(Debug)]
-pub struct Listener<'a> {
-    preconnection: Preconnection<'a>,
+pub struct Listener<'a, T, U> {
+    preconnection: Preconnection<'a, T, U>,
     allowed_remote_addrs: Vec<SocketAddr>,
     tcp_listener: Option<TcpListener>,
 }
 
-impl<'a> Listener<'a> {
+impl<'a, T, U> Listener<'a, T, U> {
     pub fn new(
-        preconnection: Preconnection<'a>,
-    ) -> Listener<'a> {
-        Listener {
+        preconnection: Preconnection<'a, T, U>,
+    ) -> Listener<'a, T, U> {
+        Listener::<T, U> {
             preconnection: preconnection,
             allowed_remote_addrs: vec![],
             tcp_listener: None,
@@ -75,22 +75,26 @@ impl<'a> Listener<'a> {
         return Ok(());
     }
 
-    async fn poll_tcp(&self) -> Connection<'a> {
-        let incoming_conn = self.tcp_listener.as_ref().unwrap().accept().await;
-        return Connection::new(
-            self.preconnection.clone(), 
-            TransportInstance {
-                tcp_stream_instance: Some(incoming_conn.unwrap().0),
-                udp_socket_instance: None,
-                quic_stream_instance: None,
+    async fn poll_tcp(&self) -> Connection<'a, T, U> {
+        loop {
+            let incoming_conn = self.tcp_listener.as_ref().unwrap().accept().await.unwrap();
+            if self.allowed_remote_addrs.contains(&incoming_conn.1) {
+                return Connection::new(
+                    Preconnection::new(self.preconnection.local_endpoint, self.preconnection.remote_endpoint, self.preconnection.transport_properties, self.preconnection.framer),
+                    TransportInstance {
+                        tcp_stream_instance: Some(incoming_conn.0),
+                        udp_socket_instance: None,
+                        quic_stream_instance: None,
+                    }
+                );
             }
-        );
+        }
     }
 
 }
 
-impl<'a> Stream for Listener<'a> {
-    type Item = Connection<'a>;
+impl<'a, T, U> Stream for Listener<'a, T, U> {
+    type Item = Connection<'a, T, U>;
 
     fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Return any new transport instances as Connection objects

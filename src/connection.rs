@@ -7,44 +7,37 @@ use async_std::{
     prelude::*,
 };
 
-// #[derive(Debug)]
-pub struct Connection<'a> {
-    preconnection: Preconnection<'a>,
+pub struct Connection<'a, T, U> {
+    preconnection: Preconnection<'a, T, U>,
     transport_instance: TransportInstance,
 }
 
-impl<'a> Connection<'a> {
+impl<'a, T, U> Connection<'a, T, U> {
     pub fn new(
-        preconnection: Preconnection<'a>,
+        preconnection: Preconnection<'a, T, U>,
         transport_instance: TransportInstance,
-    ) -> Connection<'a> {
+    ) -> Connection::<'a, T, U> {
         Connection {
             preconnection: preconnection,
             transport_instance: transport_instance,
         }
     }
 
-    pub async fn send(&self, message: Message) -> Result<(), TapsError> {
-        let message_data: Vec<u8>;
-
-        if self.preconnection.framer.is_some() {
-            message_data = self.preconnection.framer.unwrap().new_sent_message(&self, &message);
-        } else {
-            message_data = message.data;
-        }
+    pub async fn send(&mut self, message: Message<T>) -> Result<(), TapsError> {
+        let send_data: Vec<u8> = self.preconnection.framer.new_sent_message(message);
 
         if self.transport_instance.tcp_stream_instance.is_some() {
-            return self.send_message_tcp(message_data).await;
+            return self.send_message_tcp(send_data).await;
         } else if self.transport_instance.udp_socket_instance.is_some() {
-            return self.send_message_udp(message_data).await;
+            return self.send_message_udp(send_data).await;
         } else if self.transport_instance.quic_stream_instance.is_some() {
-            return self.send_message_quic(message_data).await;
+            return self.send_message_quic(send_data).await;
         }
 
         return Ok(())
     }
 
-    pub async fn receive(&self) -> Result<Message, TapsError> {
+    pub async fn receive(&mut self) -> Result<Message<U>, TapsError> {
         let mut result = Err(TapsError::MessageReceiveFailed);
 
         if self.transport_instance.tcp_stream_instance.is_some() {
@@ -60,9 +53,7 @@ impl<'a> Connection<'a> {
             Err(e) => return Err(e),
         };
 
-        // deframe...
-
-        return Ok(Message::new(message_data, None));
+        return Ok(Message::<U>::new(self.preconnection.framer.handle_received_data(message_data), None));
     }
 
     pub async fn close(&self) -> Result<(), TapsError> {
@@ -87,20 +78,19 @@ impl<'a> Connection<'a> {
         }
     }
 
-    async fn send_message_quic(&self, message_data: Vec<u8>) -> Result<(), TapsError> {
-        todo!();
-        // let mut quic_instance = self.transport_instance.quic_stream_instance.unwrap();
-        // let mut conn = quic_instance.as_mut();
+    async fn send_message_quic(&mut self, message_data: Vec<u8>) -> Result<(), TapsError> {
+        let quic_instance = self.transport_instance.quic_stream_instance.as_mut().unwrap();
+        let mut conn = quic_instance.as_mut();
 
-        // // Handshake not completed
-        // if !conn.is_established() {
-        //     return Err(TapsError::MessageSendFailed);
-        // }
+        // Handshake not completed
+        if !conn.is_established() {
+            return Err(TapsError::MessageSendFailed);
+        }
 
-        // match conn.stream_send(0, &message_data, true) {
-        //     Ok(_) => return Ok(()),
-        //     Err(_) => return Err(TapsError::MessageSendFailed),
-        // }        
+        match conn.stream_send(0, &message_data, true) {
+            Ok(_) => return Ok(()),
+            Err(_) => return Err(TapsError::MessageSendFailed),
+        }        
     }
 
     async fn receive_message_tcp(&self) -> Result<Vec<u8>, TapsError> {
@@ -119,21 +109,20 @@ impl<'a> Connection<'a> {
         }
     }
 
-    async fn receive_message_quic(&self) -> Result<Vec<u8>, TapsError> {
-        todo!();
-        // let mut buf = vec![0u8; 1024];
-        // let mut conn = self.transport_instance.quic_stream_instance.unwrap();
-        // let mut read = false;
+    async fn receive_message_quic(&mut self) -> Result<Vec<u8>, TapsError> {
+        let mut buf = vec![0u8; 1024];
+        let conn = self.transport_instance.quic_stream_instance.as_mut().unwrap();
+        let mut read = false;
 
-        // for stream_id in conn.readable() {
-        //     if conn.stream_recv(stream_id, &mut buf).is_ok() {
-        //         read = true;
-        //         break;
-        //     }
-        // }
-        // if read == false {
-        //     return Err(TapsError::MessageReceiveFailed);
-        // }
-        // return Ok(buf);
+        for stream_id in conn.readable() {
+            if conn.stream_recv(stream_id, &mut buf).is_ok() {
+                read = true;
+                break;
+            }
+        }
+        if read == false {
+            return Err(TapsError::MessageReceiveFailed);
+        }
+        return Ok(buf);
     }
 }
